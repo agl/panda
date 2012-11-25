@@ -21,7 +21,7 @@ func init() {
 	http.HandleFunc("/exchange/", Exchange)
 }
 
-const bodyLimit = 4096
+const bodyLimit = 1<<17
 const defaultLifetime = 5 * 24 * time.Hour
 
 type Posting struct {

@@ -54,8 +54,8 @@ func main() {
 		os.Exit(2)
 	}
 
-	const maxBody = 4096
-	if limit := maxBody - 24 - secretbox.Overhead; len(pubKeyBytes) > limit {
+	const maxBody = 1<<17
+	if limit := maxBody - 24 - secretbox.Overhead - 2; len(pubKeyBytes) > limit {
 		fmt.Fprintf(os.Stderr, "--key-file is too large (%d bytes of a maximum of %d)\n", len(pubKeyBytes), limit)
 		os.Exit(2)
 	}
@@ -120,9 +120,14 @@ func main() {
 	var nonce [24]byte
 	copy(nonce[:], nonceSlice)
 
-	box := make([]byte, len(nonce)+secretbox.Overhead+len(pubKeyBytes))
+	padded := make([]byte, maxBody - len(nonce) - secretbox.Overhead)
+	padded[0] = byte(len(pubKeyBytes))
+	padded[1] = byte(len(pubKeyBytes) >> 8)
+	copy(padded[2:], pubKeyBytes)
+
+	box := make([]byte, maxBody)
 	copy(box, nonce[:])
-	secretbox.Seal(box[len(nonce):len(nonce)], pubKeyBytes, &nonce, &key)
+	secretbox.Seal(box[len(nonce):len(nonce)], padded, &nonce, &key)
 
 	h := sha256.New()
 	h.Write(key[:])
@@ -164,7 +169,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Reply from server is too large\n")
 			os.Exit(2)
 		}
-		if len(body) < len(nonce)+secretbox.Overhead {
+		if len(body) < len(nonce)+secretbox.Overhead+2 {
 			fmt.Fprintf(os.Stderr, "Reply from server is too short to be valid: %x\n", body)
 			os.Exit(2)
 		}
@@ -174,6 +179,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Failed to authenticate reply from server\n")
 			os.Exit(2)
 		}
+		l := int(unsealed[0]) | int(unsealed[1]) << 8
+		unsealed = unsealed[2:]
+		if l > len(unsealed) {
+			fmt.Fprintf(os.Stderr, "Corrupt but authentic message found.\n")
+			os.Exit(2)
+		}
+		unsealed = unsealed[:l]
 		os.Stdout.Write(unsealed)
 	default:
 		fmt.Fprintf(os.Stderr, "HTTP error from server: %s\n", response.Status)
