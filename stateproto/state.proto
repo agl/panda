@@ -1,0 +1,9 @@
+package stateproto;
+
+message State {
+	required bytes key = 1;
+	required bytes message = 2;
+        required bytes x_bytes = 3;
+        required bytes public_bytes = 4;
+        optional bytes shared_key = 5;
+};
